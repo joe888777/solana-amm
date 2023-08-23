@@ -2,7 +2,7 @@
 macro_rules! assert_non_zero {
     ($array:expr) => {
         if $array.contains(&0u64) {
-            return err!(AmmError::ZeroBalance)
+            return err!(AmmError::ZeroBalance);
         }
     };
 }
@@ -11,7 +11,7 @@ macro_rules! assert_non_zero {
 macro_rules! assert_not_locked {
     ($lock:expr) => {
         if $lock == true {
-            return err!(AmmError::PoolLocked)
+            return err!(AmmError::PoolLocked);
         }
     };
 }
@@ -31,10 +31,8 @@ macro_rules! has_update_authority {
         match $x.config.authority {
             Some(a) => {
                 require_keys_eq!(a, $x.user.key(), AmmError::InvalidAuthority);
-            },
-            None => return err!(AmmError::NoAuthoritySet)
+            }
+            None => return err!(AmmError::NoAuthoritySet),
         }
     };
 }
-
-

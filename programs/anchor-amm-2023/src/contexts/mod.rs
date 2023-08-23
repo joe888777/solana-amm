@@ -1,10 +1,10 @@
-pub mod initialize;
 pub mod deposit;
-pub mod withdraw;
+pub mod initialize;
 pub mod swap;
 pub mod update;
-pub use initialize::*;
+pub mod withdraw;
 pub use deposit::*;
-pub use withdraw::*;
+pub use initialize::*;
 pub use swap::*;
 pub use update::*;
+pub use withdraw::*;

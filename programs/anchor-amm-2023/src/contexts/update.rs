@@ -1,7 +1,7 @@
-use anchor_lang::prelude::*;
+use crate::errors::AmmError;
 use crate::has_update_authority;
 use crate::state::config::Config;
-use crate::errors::AmmError;
+use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct Update<'info> {
@@ -15,26 +15,19 @@ pub struct Update<'info> {
         bump = config.config_bump,
     )]
     pub config: Account<'info, Config>,
-    pub system_program: Program<'info, System>
+    pub system_program: Program<'info, System>,
 }
 
 impl<'info> Update<'info> {
-    pub fn lock(
-        &mut self,
-    ) -> Result<()> {
+    pub fn lock(&mut self) -> Result<()> {
         has_update_authority!(self);
         self.config.locked = true;
         Ok(())
     }
 
-    pub fn unlock(
-        &mut self,
-    ) -> Result<()> {
+    pub fn unlock(&mut self) -> Result<()> {
         has_update_authority!(self);
         self.config.locked = false;
         Ok(())
     }
 }
-
-
-

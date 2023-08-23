@@ -1,10 +1,10 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token::{Mint, Token, TokenAccount, Transfer, MintTo, transfer, mint_to};
-use anchor_spl::associated_token::AssociatedToken;
-use constant_product_curve::ConstantProduct;
-use crate::{assert_non_zero, assert_not_locked, assert_not_expired};
-use crate::state::config::Config;
 use crate::errors::AmmError;
+use crate::state::config::Config;
+use crate::{assert_non_zero, assert_not_expired, assert_not_locked};
+use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{mint_to, transfer, Mint, MintTo, Token, TokenAccount, Transfer};
+use constant_product_curve::ConstantProduct;
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
@@ -49,7 +49,7 @@ pub struct Deposit<'info> {
         associated_token::authority = user,
     )]
     pub user_lp: Box<Account<'info, TokenAccount>>,
-    
+
     /// CHECK: just a pda for signing
     #[account(seeds = [b"auth"], bump = config.auth_bump)]
     pub auth: UncheckedAccount<'info>,
@@ -72,15 +72,18 @@ impl<'info> Deposit<'info> {
     pub fn deposit(
         &self,
         amount: u64, // Amount of LP token to claim
-        max_x: u64, // Max amount of X we are willing to deposit
-        max_y: u64, // Max amount of Y we are willing to deposit
+        max_x: u64,  // Max amount of X we are willing to deposit
+        max_y: u64,  // Max amount of Y we are willing to deposit
         expiration: i64,
     ) -> Result<()> {
         assert_not_locked!(self.config.locked);
         assert_not_expired!(expiration);
         assert_non_zero!([amount, max_x, max_y]);
 
-        let (x,y) = match self.mint_lp.supply == 0 && self.vault_x.amount == 0 && self.vault_y.amount == 0 {
+        let (x, y) = match self.mint_lp.supply == 0
+            && self.vault_x.amount == 0
+            && self.vault_y.amount == 0
+        {
             true => (max_x, max_y),
             false => {
                 let amounts = ConstantProduct::xy_deposit_amounts_from_l(
@@ -88,8 +91,9 @@ impl<'info> Deposit<'info> {
                     self.vault_y.amount,
                     self.mint_lp.supply,
                     amount,
-                    6
-                ).map_err(AmmError::from)?;
+                    6,
+                )
+                .map_err(AmmError::from)?;
                 (amounts.x, amounts.y)
             }
         };
@@ -101,15 +105,17 @@ impl<'info> Deposit<'info> {
         self.mint_lp_tokens(amount)
     }
 
-    pub fn deposit_tokens(
-        &self,
-        is_x: bool,
-        amount:u64
-    ) -> Result<()> {  
+    pub fn deposit_tokens(&self, is_x: bool, amount: u64) -> Result<()> {
         let (from, to) = match is_x {
-            true => (self.user_x.to_account_info(), self.vault_x.to_account_info()),
-            false => (self.user_y.to_account_info(), self.vault_y.to_account_info())
-        };      
+            true => (
+                self.user_x.to_account_info(),
+                self.vault_x.to_account_info(),
+            ),
+            false => (
+                self.user_y.to_account_info(),
+                self.vault_y.to_account_info(),
+            ),
+        };
         let cpi_accounts = Transfer {
             from,
             to,
@@ -119,27 +125,21 @@ impl<'info> Deposit<'info> {
         transfer(ctx, amount)
     }
 
-    pub fn mint_lp_tokens(
-        &self,
-        amount:u64
-    ) -> Result<()> {        
+    pub fn mint_lp_tokens(&self, amount: u64) -> Result<()> {
         let accounts = MintTo {
             mint: self.mint_lp.to_account_info(),
             to: self.user_lp.to_account_info(),
             authority: self.auth.to_account_info(),
         };
 
-        let seeds = &[
-            &b"auth"[..],
-            &[self.config.auth_bump],
-        ];
+        let seeds = &[&b"auth"[..], &[self.config.auth_bump]];
 
         let signer_seeds = &[&seeds[..]];
 
         let ctx = CpiContext::new_with_signer(
-            self.token_program.to_account_info(), 
+            self.token_program.to_account_info(),
             accounts,
-            signer_seeds
+            signer_seeds,
         );
         mint_to(ctx, amount)
     }
