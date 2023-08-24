@@ -3,7 +3,13 @@ import { BN } from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { AnchorAmm2023, IDL } from "../target/types/anchor_amm_2023";
 import { ConstantProduct, LiquidityPair } from "constant-product-curve-wasm";
-import { PublicKey, Commitment, Keypair, SystemProgram } from "@solana/web3.js";
+import {
+  PublicKey,
+  Commitment,
+  Keypair,
+  SystemProgram,
+  Connection,
+} from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID as associatedTokenProgram,
   TOKEN_PROGRAM_ID as tokenProgram,
@@ -12,16 +18,20 @@ import {
   mintTo,
   getAssociatedTokenAddress,
   TOKEN_PROGRAM_ID,
+  getAccount,
+  Account as TokenAccount,
 } from "@solana/spl-token";
 import { randomBytes } from "crypto";
 import { assert } from "chai";
 import { ASSOCIATED_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
 
 const commitment: Commitment = "confirmed"; // processed, confirmed, finalized
+const DECIMALS = 6;
 
 describe("anchor-amm-2023", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
+  const connection = anchor.getProvider().connection;
 
   const programId = new PublicKey(
     "GiVFHELhmrVa7sMGZUcG52M3rfqzPXNsZ9AokuKD8Tmy"
@@ -234,11 +244,21 @@ describe("anchor-amm-2023", () => {
 
   it("Deposit", async () => {
     try {
+      const vaultXBefore = await getAccount(
+        connection,
+        vault_x_ata,
+        commitment
+      );
+      const vaultYBefore = await getAccount(
+        connection,
+        vault_y_ata,
+        commitment
+      );
       const tx = await program.methods
         .deposit(
-          new BN(20),
-          new BN(20),
-          new BN(30),
+          new BN(20 * 10 ** DECIMALS),
+          new BN(20 * 10 ** DECIMALS),
+          new BN(30 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -260,6 +280,7 @@ describe("anchor-amm-2023", () => {
         .signers([initializer])
         .rpc();
       await confirmTx(tx);
+      await balanceChange(connection, vaultXBefore, vaultYBefore);
       console.log("Your deposit transaction signature", tx);
     } catch (e) {
       let err = e as anchor.AnchorError;
@@ -272,11 +293,21 @@ describe("anchor-amm-2023", () => {
 
   it("Swap X for Y", async () => {
     try {
+      const vaultXBefore = await getAccount(
+        connection,
+        vault_x_ata,
+        commitment
+      );
+      const vaultYBefore = await getAccount(
+        connection,
+        vault_y_ata,
+        commitment
+      );
       const tx = await program.methods
         .swap(
           true,
-          new BN(5),
-          new BN(6),
+          new BN(5 * 10 ** DECIMALS),
+          new BN(6 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -296,6 +327,7 @@ describe("anchor-amm-2023", () => {
         .signers([initializer])
         .rpc();
       await confirmTx(tx);
+      await balanceChange(connection, vaultXBefore, vaultYBefore);
       console.log("Your transaction signature", tx);
     } catch (e) {
       let err = e as anchor.AnchorError;
@@ -308,11 +340,21 @@ describe("anchor-amm-2023", () => {
 
   it("Swap Y for X", async () => {
     try {
+      const vaultXBefore = await getAccount(
+        connection,
+        vault_x_ata,
+        commitment
+      );
+      const vaultYBefore = await getAccount(
+        connection,
+        vault_y_ata,
+        commitment
+      );
       const tx = await program.methods
         .swap(
           false,
-          new BN(6),
-          new BN(5),
+          new BN(6 * 10 ** DECIMALS),
+          new BN(5 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -332,6 +374,7 @@ describe("anchor-amm-2023", () => {
         .signers([initializer])
         .rpc();
       await confirmTx(tx);
+      await balanceChange(connection, vaultXBefore, vaultYBefore);
       console.log("Your transaction signature", tx);
     } catch (e) {
       let err = e as anchor.AnchorError;
@@ -344,11 +387,21 @@ describe("anchor-amm-2023", () => {
 
   it("Withdraw", async () => {
     try {
+      const vaultXBefore = await getAccount(
+        connection,
+        vault_x_ata,
+        commitment
+      );
+      const vaultYBefore = await getAccount(
+        connection,
+        vault_y_ata,
+        commitment
+      );
       const tx = await program.methods
         .withdraw(
-          new BN(20),
-          new BN(20),
-          new BN(30),
+          new BN(20 * 10 ** DECIMALS),
+          new BN(20 * 10 ** DECIMALS),
+          new BN(30 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -370,6 +423,7 @@ describe("anchor-amm-2023", () => {
         .signers([initializer])
         .rpc();
       await confirmTx(tx);
+      await balanceChange(connection, vaultXBefore, vaultYBefore);
       console.log("Your transaction signature", tx);
     } catch (e) {
       let err = e as anchor.AnchorError;
@@ -412,4 +466,24 @@ const newMintToAta = async (
     mint,
     ata,
   };
+};
+
+const balanceChange = async (
+  connection: Connection,
+  vaultX: TokenAccount,
+  vaultY: TokenAccount
+) => {
+  const vaultXAfter = await getAccount(connection, vaultX.address, commitment);
+  const vaultYAfter = await getAccount(connection, vaultY.address, commitment);
+  console.log("\n    Vault Balance");
+  console.table({
+    before: {
+      X: Number(vaultX.amount) / 10 ** 6,
+      Y: Number(vaultY.amount) / 10 ** 6,
+    },
+    after: {
+      X: Number(vaultXAfter.amount) / 10 ** 6,
+      Y: Number(vaultYAfter.amount) / 10 ** 6,
+    },
+  });
 };
