@@ -70,9 +70,9 @@ describe("anchor-amm-2023", () => {
   let initializer_x_ata: PublicKey;
   let initializer_y_ata: PublicKey;
   let initializer_lp_ata: PublicKey;
-  // let user_x_ata: PublicKey;
-  // let user_y_ata: PublicKey;
-  // let user_lp_ata: PublicKey;
+  let user_x_ata: PublicKey;
+  let user_y_ata: PublicKey;
+  let user_lp_ata: PublicKey;
   let vault_x_ata: PublicKey;
   let vault_y_ata: PublicKey;
   let vault_lp_ata: PublicKey;
@@ -126,9 +126,14 @@ describe("anchor-amm-2023", () => {
       true,
       tokenProgram
     );
-    // user_x_ata = await getAssociatedTokenAddress(mint_x, user.publicKey, false, tokenProgram);
-    // user_y_ata = await getAssociatedTokenAddress(mint_y, user.publicKey, false, tokenProgram);
-    // user_lp_ata = await getAssociatedTokenAddress(mint_lp, user.publicKey, false, tokenProgram);
+    user_x_ata = await mintToAta(connection, initializer, user, mint_x);
+    user_y_ata = await mintToAta(connection, initializer, user, mint_y);
+    user_lp_ata = await getAssociatedTokenAddress(
+      mint_lp,
+      user.publicKey,
+      false,
+      tokenProgram
+    );
   });
 
   // // let c = new ConstantProduct(BigInt(30), BigInt(20), BigInt(20), 20);
@@ -242,7 +247,7 @@ describe("anchor-amm-2023", () => {
     }
   });
 
-  it("Deposit", async () => {
+  it("Deposit 1st", async () => {
     try {
       const vaultXBefore = await getAccount(
         connection,
@@ -291,6 +296,55 @@ describe("anchor-amm-2023", () => {
     }
   });
 
+  it("Deposit 2nd", async () => {
+    try {
+      const vaultXBefore = await getAccount(
+        connection,
+        vault_x_ata,
+        commitment
+      );
+      const vaultYBefore = await getAccount(
+        connection,
+        vault_y_ata,
+        commitment
+      );
+      const tx = await program.methods
+        .deposit(
+          new BN(10 * 10 ** DECIMALS),
+          new BN(10 * 10 ** DECIMALS),
+          new BN(15 * 10 ** DECIMALS),
+          new BN(Math.floor(new Date().getTime() / 1000) + 600)
+        )
+        .accountsStrict({
+          auth,
+          user: user.publicKey,
+          mintX: mint_x,
+          mintY: mint_y,
+          mintLp: mint_lp,
+          userX: user_x_ata,
+          userY: user_y_ata,
+          userLp: user_lp_ata,
+          vaultX: vault_x_ata,
+          vaultY: vault_y_ata,
+          config,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+      await confirmTx(tx);
+      await balanceChange(connection, vaultXBefore, vaultYBefore);
+      console.log("Your deposit transaction signature", tx);
+    } catch (e) {
+      let err = e as anchor.AnchorError;
+      console.error(e);
+      if (err.error.errorCode.code !== "InvalidAuthority") {
+        throw e;
+      }
+    }
+  });
+
   it("Swap X for Y", async () => {
     try {
       const vaultXBefore = await getAccount(
@@ -306,8 +360,8 @@ describe("anchor-amm-2023", () => {
       const tx = await program.methods
         .swap(
           true,
-          new BN(5 * 10 ** DECIMALS),
-          new BN(6 * 10 ** DECIMALS),
+          new BN(15 * 10 ** DECIMALS),
+          new BN(15 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -353,8 +407,8 @@ describe("anchor-amm-2023", () => {
       const tx = await program.methods
         .swap(
           false,
-          new BN(6 * 10 ** DECIMALS),
-          new BN(5 * 10 ** DECIMALS),
+          new BN(30 * 10 ** DECIMALS),
+          new BN(7.5 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -400,8 +454,8 @@ describe("anchor-amm-2023", () => {
       const tx = await program.methods
         .withdraw(
           new BN(20 * 10 ** DECIMALS),
-          new BN(20 * 10 ** DECIMALS),
-          new BN(30 * 10 ** DECIMALS),
+          new BN(15 * 10 ** DECIMALS),
+          new BN(40 * 10 ** DECIMALS),
           new BN(Math.floor(new Date().getTime() / 1000) + 600)
         )
         .accountsStrict({
@@ -454,7 +508,7 @@ const confirmTxs = async (signatures: string[]) => {
 };
 
 const newMintToAta = async (
-  connection,
+  connection: Connection,
   minter: Keypair
 ): Promise<{ mint: PublicKey; ata: PublicKey }> => {
   const mint = await createMint(connection, minter, minter.publicKey, null, 6);
@@ -466,6 +520,23 @@ const newMintToAta = async (
     mint,
     ata,
   };
+};
+
+const mintToAta = async (
+  connection: Connection,
+  minter: Keypair,
+  receiver: Keypair,
+  mint: PublicKey
+) => {
+  const ata = await createAccount(
+    connection,
+    receiver,
+    mint,
+    receiver.publicKey
+  );
+  const signature = await mintTo(connection, minter, mint, ata, minter, 21e8);
+  await confirmTx(signature);
+  return ata;
 };
 
 const balanceChange = async (
